@@ -1,114 +1,139 @@
-# Site-to-site IPsec VPN lab (strongSwan)
+# Need Academy
 
-[![lab](https://github.com/aliou27/ipsec-vpn-lab/actions/workflows/lab.yml/badge.svg)](https://github.com/aliou27/ipsec-vpn-lab/actions/workflows/lab.yml)
+A single Spring Boot application that serves both the API and the web interface.
+One build, one command, one URL. No Node, no separate frontend, no database to install.
 
-Three company sites connected over an untrusted WAN, first **without** a VPN,
-then with **IPsec tunnels** built with strongSwan. Every claim in this README
-is checked by an automated test that runs on each push.
+## What you need on your Mac
 
-Based on my IPSL engineering school cryptography project (exercise 1),
-originally done on Cisco routers in GNS3, rebuilt here with Linux so that
-anyone can run it.
+- **Java 21**  → `java -version` should print 21 or higher
+- **Maven**  → `mvn -v`
 
-## Topology
+If either is missing:
 
+```bash
+brew install openjdk@21 maven
+sudo ln -sfn /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk \
+  /Library/Java/JavaVirtualMachines/openjdk-21.jdk
 ```
-                          web1 (.10)   web2 (.20)
-                              \          /
-                           [br0] 203.0.113.0/24      public web servers
-                                  |
-                                [wan]                untrusted network
-           62.59.1.0/30  /        |        \  59.62.1.0/30
-                        /    80.59.62.0/30   \
-                  [site-a]     [site-c]      [site-b]    site gateways
-                     |            |             |
-             192.168.1.0/24  192.168.3.0/24  192.168.2.0/24
-                  host-a        host-c         host-b    employees
-```
-
-Each box is a Linux **network namespace**: an isolated network stack with its
-own interfaces, IP addresses and routes. It is the building block Docker uses
-for container networking. No VM, no container image needed.
-
-## Progress
-
-- [x] **Step 1. Baseline without VPN**: routing works, and the WAN can read everything
-- [x] **Step 2. IPsec tunnels A↔B, A↔C, B↔C with strongSwan (IKEv2)**
-- [ ] Step 3. Only HTTP, HTTPS and ping allowed in the tunnels, fail-closed firewall
-- [ ] Step 4. Certificates instead of pre-shared keys
-- [ ] Step 5. Write-up: theory, design choices, lessons from the Cisco version
-
-## Step 1 result: why a VPN is needed
-
-With plain routing, a capture on the WAN link shows host-a downloading a
-page from host-b. The private addresses **and** the page content are visible:
-
-```
-IP 192.168.1.10 > 192.168.2.10: ICMP echo request, id 1614, seq 1, length 64
-IP 192.168.1.10.47594 > 192.168.2.10.80: Flags [S], ...
-...
-Hello from host-b (site B). CONFIDENTIAL: site B payroll 2026
-```
-
-Anyone on the path (an ISP, a compromised router) sees who talks to whom
-and what they say. Step 2 fixes this.
-
-## Step 2 result: site-to-site IPsec
-
-Each site gateway runs strongSwan and builds a tunnel to the two other sites
-(full mesh: A↔B, A↔C, B↔C). Same capture point, same traffic:
-
-```
-IP 62.59.1.2.4500 > 59.62.1.2.4500: UDP-encap: ESP(spi=0x4ab23d98,seq=0x8), length 120
-IP 59.62.1.2.4500 > 62.59.1.2.4500: UDP-encap: ESP(spi=0x38496fe2,seq=0x8), length 120
-```
-
-The WAN now only sees the two gateways exchanging ESP packets. The private
-addresses and the page content are inside the encrypted payload. Traffic to
-the public web servers is not a VPN destination and stays unchanged.
-
-| Setting | Choice | Why |
-|---|---|---|
-| Key exchange protocol | IKEv2 | Current standard, 4 messages instead of 9 for IKEv1 |
-| IKE SA | AES-256-GCM, PRF SHA-256, Curve25519 | Authenticated encryption, modern and fast elliptic-curve DH |
-| ESP (data) | AES-256-GCM + Curve25519 on rekey | Encryption and integrity in one pass, perfect forward secrecy |
-| Authentication | Pre-shared key, one per tunnel | Random 256-bit keys generated at startup, never stored in git (certificates in step 4) |
-| Traffic selectors | Site LAN ↔ remote site LAN | Only site-to-site traffic enters the tunnel |
-| Dead Peer Detection | 10 s, restart on failure | The tunnel comes back on its own if a peer reboots |
-
-The configuration of each gateway is in [`vpn/site-a/swanctl.conf`](vpn/site-a/swanctl.conf)
-(commented line by line, with the Cisco IOS equivalent of each block).
 
 ## Run it
 
-Nothing to install on your computer:
-
-1. Click **Code → Codespaces → Create codespace** on this repo.
-2. In the terminal, run:
-
 ```bash
-sudo bash run.sh
+cd need-academy
+mvn spring-boot:run
 ```
 
-This builds the network, tests it without VPN, starts the VPN, tests it
-again, and tears everything down.
+Then open **http://localhost:8080**
 
-To explore by hand: `sudo bash run.sh up` (network + VPN), then for example
-`sudo ip netns exec host-a ping 192.168.2.10`, then `sudo bash run.sh down`.
+Two accounts are created the first time it starts:
 
-On any Ubuntu/Debian machine: `sudo apt-get install -y iproute2 tcpdump curl
-iputils-ping python3 strongswan-charon strongswan-swanctl` then `sudo bash run.sh`.
+| Role | Email | Password |
+|---|---|---|
+| Teacher | teacher@needacademy.com | teacher123 |
+| Student | student@needacademy.com | student123 |
 
-## Repository layout
+Change the teacher password in `src/main/java/com/needacademy/config/Seed.java`
+before anyone else uses this.
 
-| Path | Role |
-|---|---|
-| `run.sh` | Entry point |
-| `lab/up.sh` | Builds the machines, cables, addresses and routes |
-| `lab/vpn-up.sh` | Generates the keys and starts strongSwan on the 3 gateways |
-| `lab/down.sh` | Destroys everything |
-| `vpn/site-*/swanctl.conf` | strongSwan configuration of each gateway |
-| `lab/common.sh` | Addressing plan and helpers shared by all scripts |
-| `tests/` | One test script per step |
-| `results/` | Packet captures from the last run (open the `.pcap` in Wireshark) |
-| `.github/workflows/lab.yml` | Runs the lab and the tests on every push |
+## Build a single file you can deploy
+
+```bash
+mvn clean package
+java -jar target/need-academy-1.0.0.jar
+```
+
+That JAR contains the API, the web interface, and the database driver.
+Drop it on Railway, a VPS, or anywhere with Java 21.
+
+## Where the data lives
+
+A file-based H2 database at `./data/needacademy.mv.db`, created next to where you
+run the app. It survives restarts. To wipe everything and start clean:
+
+```bash
+rm -rf data/
+```
+
+When you're ready for Postgres, replace the three `spring.datasource.*` lines in
+`src/main/resources/application.properties`. Nothing else changes.
+
+## How it works
+
+**Teacher side**
+
+- *Exercises*: build a reusable exercise: passages with a reading time, then
+  questions with their own per-question time limits. Duplicate one to make a variant.
+- *Students*: create accounts. You set the email and password and hand them over.
+- *Assign*: pick an exercise, tick the students, set a deadline and how many attempts.
+- *Results*: every attempt, question by question, with the time each answer took.
+
+**Student side**
+
+One exercise at a time. The passage appears for the number of seconds you set, then
+disappears. Each question appears alone with its own countdown. No going back.
+
+**The clock**
+
+The countdown is drawn in the browser but decided on the server. Every step carries a
+server-issued deadline; answers arriving after it (plus 3 seconds of network slack) are
+recorded as timed out. Refreshing the page, closing the laptop, or changing the system
+clock does not buy extra time.
+
+## Level estimate
+
+A CEFR level is only produced for a global assessment: the exercise must be a
+PLACEMENT or a MOCK_EXAM *and* carry at least 12 graded questions
+(`ExamService.MIN_QUESTIONS_FOR_LEVEL`). There, the percentage maps onto a band
+relative to the exercise's target level: 90%+ on a B1 paper reads as B2, under
+40% reads as A2.
+
+Ordinary practice exercises get an encouragement message instead
+(`ExamService.encouragement`). Skill breakdowns are still recorded for every
+attempt, since that is what feeds the long-term profile, but the profile only
+reads a level from breakdowns with at least four questions behind them.
+
+The filter also applies on read (`ExamService.publishedLevel`), so attempts
+submitted before this rule no longer show a level they should never have had.
+
+## Database migrations
+
+Every schema or data change is a numbered file under
+`src/main/resources/db/migration`, applied once per database by Flyway and
+recorded in `flyway_schema_history`. Nothing is typed by hand in the Neon
+console. Naming rules and the two project-specific constraints (SQL must run on
+both PostgreSQL and H2; a migration may not assume columns added by the entities
+in the same release) are in `db/migration/CONVENTIONS.md`.
+
+The existing production database is baselined at version 1 on first boot, so V1
+is never executed there. New work starts at V2.
+
+## Checking before delivery
+
+Maven Central is unreachable from the execution sandbox, so the project can't be
+compiled there. `tools/ScopeCheck.java` parses the source tree with javac's
+parser (no dependencies needed) and reports syntax errors, duplicated methods,
+out-of-scope or unknown names, calls to methods a project class doesn't declare,
+and missing `java.util` / `java.time` imports. Needs a full JDK:
+
+```bash
+curl -sL -o jdk.tar.gz "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz"
+tar xzf jdk.tar.gz
+./jdk-21.0.5+11/bin/javac -d tools/out tools/ScopeCheck.java
+./jdk-21.0.5+11/bin/java -cp tools/out ScopeCheck src/main/java
+node --check src/main/resources/static/app.js
+```
+
+## Project layout
+
+```
+src/main/java/com/needacademy/
+  entity/     AppUser, Exercise, Section, Question, Assignment, Attempt, ItemResponse
+  repo/       Spring Data repositories
+  service/    ExamService: the timed engine and grading
+  web/        AuthController, AdminController, StudentController
+  config/     security, seed data
+src/main/resources/
+  static/     index.html (accueil public), css/ (une feuille par composant),
+              partials/ (écrans HTML), js/ (modules ES) : voir css/README.md et js/README.md
+  application.properties
+```
