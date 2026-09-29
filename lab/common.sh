@@ -13,6 +13,7 @@ STATE_DIR="${STATE_DIR:-/tmp/ipsec-lab}"
 
 # All the machines of the lab.
 ROUTERS=(wan site-a site-b site-c)
+SITES=(site-a site-b site-c)          # the three VPN gateways
 HOSTS=(host-a host-b host-c web1 web2)
 NODES=("${ROUTERS[@]}" "${HOSTS[@]}")
 
@@ -31,6 +32,16 @@ WEB2=203.0.113.20
 on() {
   local node="$1"; shift
   ip netns exec "$node" "$@"
+}
+
+# Talk to the strongSwan daemon of a site:  swan site-a --list-sas
+# (swanctl is the strongSwan command-line tool; each site has its own daemon,
+#  reached through its own control socket)
+swan() {
+  local site="$1" cmd="$2"; shift 2
+  STRONGSWAN_CONF="$STATE_DIR/$site/strongswan.conf" \
+    swanctl "$cmd" --uri "unix://$STATE_DIR/$site/run/charon.vici" "$@" \
+    2> >(grep -v -e "plugin '" -e "opening directory" >&2)
 }
 
 # Pretty output for tests.

@@ -33,7 +33,7 @@ for container networking. No VM, no container image needed.
 ## Progress
 
 - [x] **Step 1. Baseline without VPN**: routing works, and the WAN can read everything
-- [ ] Step 2. IPsec tunnels A↔B, A↔C, B↔C with strongSwan (IKEv2)
+- [x] **Step 2. IPsec tunnels A↔B, A↔C, B↔C with strongSwan (IKEv2)**
 - [ ] Step 3. Only HTTP, HTTPS and ping allowed in the tunnels, fail-closed firewall
 - [ ] Step 4. Certificates instead of pre-shared keys
 - [ ] Step 5. Write-up: theory, design choices, lessons from the Cisco version
@@ -53,6 +53,32 @@ Hello from host-b (site B). CONFIDENTIAL: site B payroll 2026
 Anyone on the path (an ISP, a compromised router) sees who talks to whom
 and what they say. Step 2 fixes this.
 
+## Step 2 result: site-to-site IPsec
+
+Each site gateway runs strongSwan and builds a tunnel to the two other sites
+(full mesh: A↔B, A↔C, B↔C). Same capture point, same traffic:
+
+```
+IP 62.59.1.2.4500 > 59.62.1.2.4500: UDP-encap: ESP(spi=0x4ab23d98,seq=0x8), length 120
+IP 59.62.1.2.4500 > 62.59.1.2.4500: UDP-encap: ESP(spi=0x38496fe2,seq=0x8), length 120
+```
+
+The WAN now only sees the two gateways exchanging ESP packets. The private
+addresses and the page content are inside the encrypted payload. Traffic to
+the public web servers is not a VPN destination and stays unchanged.
+
+| Setting | Choice | Why |
+|---|---|---|
+| Key exchange protocol | IKEv2 | Current standard, 4 messages instead of 9 for IKEv1 |
+| IKE SA | AES-256-GCM, PRF SHA-256, Curve25519 | Authenticated encryption, modern and fast elliptic-curve DH |
+| ESP (data) | AES-256-GCM + Curve25519 on rekey | Encryption and integrity in one pass, perfect forward secrecy |
+| Authentication | Pre-shared key, one per tunnel | Random 256-bit keys generated at startup, never stored in git (certificates in step 4) |
+| Traffic selectors | Site LAN ↔ remote site LAN | Only site-to-site traffic enters the tunnel |
+| Dead Peer Detection | 10 s, restart on failure | The tunnel comes back on its own if a peer reboots |
+
+The configuration of each gateway is in [`vpn/site-a/swanctl.conf`](vpn/site-a/swanctl.conf)
+(commented line by line, with the Cisco IOS equivalent of each block).
+
 ## Run it
 
 Nothing to install on your computer:
@@ -61,15 +87,17 @@ Nothing to install on your computer:
 2. In the terminal, run:
 
 ```bash
-sudo bash run.sh          # build the lab, run all tests, tear it down
+sudo bash run.sh
 ```
 
-Or step by step: `sudo bash run.sh up`, then `sudo bash run.sh test`, then
-`sudo bash run.sh down`. While the lab is up, you can use any machine, e.g.
-`sudo ip netns exec host-a ping 192.168.2.10`.
+This builds the network, tests it without VPN, starts the VPN, tests it
+again, and tears everything down.
+
+To explore by hand: `sudo bash run.sh up` (network + VPN), then for example
+`sudo ip netns exec host-a ping 192.168.2.10`, then `sudo bash run.sh down`.
 
 On any Ubuntu/Debian machine: `sudo apt-get install -y iproute2 tcpdump curl
-iputils-ping python3` then `sudo bash run.sh`.
+iputils-ping python3 strongswan-charon strongswan-swanctl` then `sudo bash run.sh`.
 
 ## Repository layout
 
@@ -77,7 +105,9 @@ iputils-ping python3` then `sudo bash run.sh`.
 |---|---|
 | `run.sh` | Entry point |
 | `lab/up.sh` | Builds the machines, cables, addresses and routes |
+| `lab/vpn-up.sh` | Generates the keys and starts strongSwan on the 3 gateways |
 | `lab/down.sh` | Destroys everything |
+| `vpn/site-*/swanctl.conf` | strongSwan configuration of each gateway |
 | `lab/common.sh` | Addressing plan and helpers shared by all scripts |
 | `tests/` | One test script per step |
 | `results/` | Packet captures from the last run (open the `.pcap` in Wireshark) |
