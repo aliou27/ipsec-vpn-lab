@@ -1,0 +1,17 @@
+16:49:41.212080 IP 192.168.1.10 > 192.168.2.10: ICMP echo request, id 911, seq 1, length 64
+16:49:41.212099 IP 192.168.2.10 > 192.168.1.10: ICMP echo reply, id 911, seq 1, length 64
+16:49:42.223520 IP 192.168.1.10 > 192.168.2.10: ICMP echo request, id 911, seq 2, length 64
+16:49:42.223548 IP 192.168.2.10 > 192.168.1.10: ICMP echo reply, id 911, seq 2, length 64
+16:49:42.232066 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [S], seq 2151990307, win 64240, options [mss 1460,sackOK,TS val 756361226 ecr 0,nop,wscale 10], length 0
+16:49:42.232093 IP 192.168.2.10.80 > 192.168.1.10.43276: Flags [S.], seq 1086331589, ack 2151990308, win 65160, options [mss 1460,sackOK,TS val 2620848705 ecr 756361226,nop,wscale 10], length 0
+16:49:42.232108 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [.], ack 1, win 63, options [nop,nop,TS val 756361226 ecr 2620848705], length 0
+16:49:42.232167 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [P.], seq 1:76, ack 1, win 63, options [nop,nop,TS val 756361226 ecr 2620848705], length 75: HTTP: GET / HTTP/1.1
+16:49:42.232173 IP 192.168.2.10.80 > 192.168.1.10.43276: Flags [.], ack 76, win 64, options [nop,nop,TS val 2620848705 ecr 756361226], length 0
+16:49:42.233221 IP 192.168.2.10.80 > 192.168.1.10.43276: Flags [P.], seq 1:187, ack 76, win 64, options [nop,nop,TS val 2620848706 ecr 756361226], length 186: HTTP: HTTP/1.0 200 OK
+16:49:42.233248 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [.], ack 187, win 63, options [nop,nop,TS val 756361227 ecr 2620848706], length 0
+16:49:42.233283 IP 192.168.2.10.80 > 192.168.1.10.43276: Flags [P.], seq 187:249, ack 76, win 64, options [nop,nop,TS val 2620848706 ecr 756361227], length 62: HTTP
+16:49:42.233287 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [.], ack 249, win 63, options [nop,nop,TS val 756361227 ecr 2620848706], length 0
+16:49:42.233317 IP 192.168.2.10.80 > 192.168.1.10.43276: Flags [F.], seq 249, ack 76, win 64, options [nop,nop,TS val 2620848706 ecr 756361227], length 0
+16:49:42.233337 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [F.], seq 76, ack 249, win 63, options [nop,nop,TS val 756361227 ecr 2620848706], length 0
+16:49:42.233352 IP 192.168.2.10.80 > 192.168.1.10.43276: Flags [.], ack 77, win 64, options [nop,nop,TS val 2620848707 ecr 756361227], length 0
+16:49:42.233359 IP 192.168.1.10.43276 > 192.168.2.10.80: Flags [.], ack 250, win 63, options [nop,nop,TS val 756361228 ecr 2620848706], length 0

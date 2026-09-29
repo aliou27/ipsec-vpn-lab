@@ -1,0 +1,28 @@
+name: lab
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iproute2 tcpdump curl iputils-ping python3 \
+            strongswan-charon strongswan-swanctl
+
+      - name: Build the lab and run the tests
+        run: sudo bash run.sh
+
+      - name: Keep the packet captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures
+          path: results/
