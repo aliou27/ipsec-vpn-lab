@@ -15,10 +15,10 @@ check_tunnels() {  # check_tunnels <site>
   sas=$(swan "$1" --list-sas 2>/dev/null || true)
   ike=$(grep -c "ESTABLISHED" <<<"$sas" || true)
   child=$(grep -c "INSTALLED" <<<"$sas" || true)
-  if [[ $ike -eq 2 && $child -eq 2 ]]; then
-    ok "$1: 2 IKE SAs established, 2 IPsec SAs installed"
+  if [[ $ike -eq 2 && $child -eq 6 ]]; then
+    ok "$1: 2 IKE SAs established, 6 IPsec SAs installed (web-out, web-in, ping x 2 peers)"
   else
-    ko "$1: $ike IKE SAs, $child IPsec SAs (expected 2 and 2)"
+    ko "$1: $ike IKE SAs, $child IPsec SAs (expected 2 and 6)"
     tail -n 20 "$STATE_DIR/$1/charon.log" | grep -v "plugin '" | sed 's/^/      /'
   fi
 }
@@ -36,7 +36,7 @@ check_ping() {  # check_ping <from> <to-ip> <label>
   fi
 }
 check_http() {  # check_http <from> <to-ip> <expected text>
-  if on "$1" curl -s --max-time 3 "http://$2/" | grep -q "$3"; then
+  if on "$1" curl --noproxy '*' -s --max-time 3 "http://$2/" | grep -q "$3"; then
     ok "$1 opens http://$2/"
   else
     ko "$1 opens http://$2/"
@@ -54,9 +54,9 @@ check_http host-a "$WEB1" "Public web server 1"
 check_http host-c "$WEB2" "Public web server 2"
 
 info "4. What an observer on the WAN sees now"
-bytes_out() {  # bytes sent in the site-a -> site-b tunnel
+bytes_out() {  # bytes sent in the site-a -> site-b tunnel (all its IPsec SAs)
   swan site-a --list-sas --ike a-b 2>/dev/null \
-    | awk '/ out /{gsub(",","",$3); print $3; exit}'
+    | awk '/ out /{gsub(",","",$3); sum += $3} END {print sum + 0}'
 }
 before=$(bytes_out)
 
@@ -65,8 +65,8 @@ on wan tcpdump -i to-a -U -w "$PCAP" >/dev/null 2>&1 &
 TCPDUMP_PID=$!
 sleep 1
 on host-a ping -c 2 -W 1 -q "$HOST_B" >/dev/null 2>&1 || true
-on host-a curl -s --max-time 3 "http://$HOST_B/" >/dev/null || true
-on host-a curl -s --max-time 3 "http://$WEB1/" >/dev/null || true
+on host-a curl --noproxy '*' -s --max-time 3 "http://$HOST_B/" >/dev/null || true
+on host-a curl --noproxy '*' -s --max-time 3 "http://$WEB1/" >/dev/null || true
 sleep 1
 kill "$TCPDUMP_PID" 2>/dev/null; wait "$TCPDUMP_PID" 2>/dev/null || true
 after=$(bytes_out)

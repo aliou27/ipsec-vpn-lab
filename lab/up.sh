@@ -16,6 +16,7 @@
 # Step 1: plain routing, NO VPN. Everything crossing the WAN is readable.
 
 source "$(dirname "$0")/common.sh"
+LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
 require_root
 require_tools
 
@@ -93,12 +94,19 @@ on wan ip route add 192.168.1.0/24 via 62.59.1.2
 on wan ip route add 192.168.2.0/24 via 59.62.1.2
 on wan ip route add 192.168.3.0/24 via 80.59.62.2
 
-info "Starting web servers"
+info "Starting web servers (HTTP 80, HTTPS 443, internal app 8080)"
+# One self-signed certificate for the HTTPS servers of the lab.
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+  -days 2 -subj "/CN=ipsec-vpn-lab" \
+  -keyout "$STATE_DIR/web-key.pem" -out "$STATE_DIR/web-cert.pem" >/dev/null 2>&1
+
 start_web() {  # start_web <node> <ip> <page text>
   local dir="$STATE_DIR/www/$1"
-  mkdir -p "$dir"
-  printf '%s\n' "$3" > "$dir/index.html"
-  on "$1" python3 -m http.server 80 --bind "$2" --directory "$dir" \
+  mkdir -p "$dir/site" "$dir/admin"
+  printf '%s\n' "$3" > "$dir/site/index.html"
+  printf 'ADMIN PANEL of %s: internal use only\n' "$1" > "$dir/admin/index.html"
+  on "$1" python3 "$LAB_DIR/webserver.py" "$2" "$dir/site" "$dir/admin" \
+    "$STATE_DIR/web-cert.pem" "$STATE_DIR/web-key.pem" \
     >"$STATE_DIR/$1-http.log" 2>&1 &
 }
 start_web host-a "$HOST_A" "Hello from host-a (site A)"
@@ -111,7 +119,7 @@ start_web web2   "$WEB2"   "Public web server 2"
 for pair in "host-a $HOST_A" "host-b $HOST_B" "host-c $HOST_C" "web1 $WEB1" "web2 $WEB2"; do
   set -- $pair
   for _ in $(seq 1 50); do
-    on "$1" curl -s -o /dev/null "http://$2/" && break
+    on "$1" curl --noproxy '*' -s -o /dev/null "http://$2/" && break
     sleep 0.1
   done
 done

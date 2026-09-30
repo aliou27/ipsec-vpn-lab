@@ -14,7 +14,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y iproute2 tcpdump curl iputils-ping python3 \
+          sudo apt-get install -y iproute2 tcpdump curl iputils-ping python3 openssl nftables \
             strongswan-charon strongswan-swanctl
 
       - name: Build the lab and run the tests

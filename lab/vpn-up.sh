@@ -50,6 +50,11 @@ done
 { secret_block ike-ac site-a site-c "$KEY_AC"; secret_block ike-bc site-b site-c "$KEY_BC"; } \
   > "$STATE_DIR/site-c/secrets.conf"
 
+info "Loading the fail-closed firewall on each site (vpn/firewall.nft)"
+for site in "${SITES[@]}"; do
+  on "$site" nft -f "$REPO_DIR/vpn/firewall.nft"
+done
+
 info "Starting strongSwan on each site"
 for site in "${SITES[@]}"; do
   dir="$STATE_DIR/$site"
@@ -104,13 +109,18 @@ for site in site-c site-b site-a; do
 done
 
 info "Waiting for the tunnels"
-established() {  # number of IKE SAs up on a site
-  swan "$1" --list-sas 2>/dev/null | grep -c "ESTABLISHED" || true
+count() {  # count <site> <word>: how many SAs are in that state
+  swan "$1" --list-sas 2>/dev/null | grep -c "$2" || true
 }
 for _ in $(seq 1 40); do
-  a=$(established site-a); b=$(established site-b); c=$(established site-c)
-  [[ $a -ge 2 && $b -ge 2 && $c -ge 2 ]] && break
+  ok_all=1
+  for s in "${SITES[@]}"; do
+    [[ $(count "$s" ESTABLISHED) -ge 2 && $(count "$s" INSTALLED) -ge 6 ]] || ok_all=0
+  done
+  [[ $ok_all == 1 ]] && break
   sleep 0.5
 done
-echo "  IKE SAs up: site-a=$a site-b=$b site-c=$c (expected 2 each)"
+for s in "${SITES[@]}"; do
+  echo "  $s: $(count "$s" ESTABLISHED) IKE SAs, $(count "$s" INSTALLED) IPsec SAs (expected 2 and 6)"
+done
 info "VPN is up"

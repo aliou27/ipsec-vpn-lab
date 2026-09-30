@@ -34,7 +34,7 @@ for container networking. No VM, no container image needed.
 
 - [x] **Step 1. Baseline without VPN**: routing works, and the WAN can read everything
 - [x] **Step 2. IPsec tunnels A↔B, A↔C, B↔C with strongSwan (IKEv2)**
-- [ ] Step 3. Only HTTP, HTTPS and ping allowed in the tunnels, fail-closed firewall
+- [x] **Step 3. Only HTTP, HTTPS and ping allowed in the tunnels, fail-closed firewall**
 - [ ] Step 4. Certificates instead of pre-shared keys
 - [ ] Step 5. Write-up: theory, design choices, lessons from the Cisco version
 
@@ -63,7 +63,7 @@ IP 62.59.1.2 > 59.62.1.2: ESP(spi=0xc27b6930,seq=0xa), length 120
 IP 59.62.1.2 > 62.59.1.2: ESP(spi=0xca7f884a,seq=0x9), length 120
 ```
 
-The WAN now only sees the two gateways exchanging ESP packets. The private
+(Output of the GitHub Actions run.) The WAN now only sees the two gateways exchanging ESP packets. The private
 addresses and the page content are inside the encrypted payload. Traffic to
 the public web servers is not a VPN destination and stays unchanged.
 
@@ -78,6 +78,44 @@ the public web servers is not a VPN destination and stays unchanged.
 
 The configuration of each gateway is in [`vpn/site-a/swanctl.conf`](vpn/site-a/swanctl.conf)
 (commented line by line, with the Cisco IOS equivalent of each block).
+
+## Step 3 result: only web and ping, and no cleartext fallback
+
+The original exercise allows only **HTTP, HTTPS and ping** between the sites.
+Each tunnel now carries three IPsec SAs with narrow traffic selectors:
+
+| IPsec SA | Traffic selectors (site A side) | Carries |
+|---|---|---|
+| `web-out` | `192.168.1.0/24[tcp/1024-65535]` ↔ `192.168.2.0/24[tcp/80,443]` | A's browsers → B's web servers, and the replies |
+| `web-in` | `192.168.1.0/24[tcp/80,443]` ↔ `192.168.2.0/24[tcp/1024-65535]` | B's browsers → A's web servers, and the replies |
+| `ping` | `192.168.1.0/24[icmp]` ↔ `192.168.2.0/24[icmp]` | ping both ways |
+
+**Lesson from the Cisco version.** Its crypto ACLs only matched
+`dst port 80/443`. The replies from a web server have **source** port 80/443,
+matched nothing, and the two peers' ACLs were not mirror images, so HTTP never
+worked through the tunnels (only ping, which has no ports, was tested). Here a
+selector always describes both directions, and a test proves that each
+direction uses its own SA.
+
+**Fail-closed firewall** ([`vpn/firewall.nft`](vpn/firewall.nft)). A flow that
+matches no selector (SSH, an internal app on port 8080) would normally just be
+routed in clear. Two nftables rules on each gateway forbid that: site-to-site
+traffic must come from IPsec (`meta ipsec`) and leave through IPsec
+(`rt ipsec`), otherwise it is dropped.
+
+What the tests check:
+
+```
+[PASS] host-a -> host-b  HTTPS
+[PASS] host-a (client) -> host-b (server) used site-a's web-out SA (1880 -> 3074 bytes)
+[PASS] host-b (client) -> host-a (server) used site-a's web-in SA (481 -> 2359 bytes)
+[PASS] host-a -> host-b:8080 (internal app) is blocked
+[PASS] nothing from these attempts reached the WAN in clear
+[PASS] spoofed cleartext packet from the WAN (fake 192.168.2.99) is dropped by site-a
+[PASS] host-a -> host-b HTTP no longer works           (strongSwan stopped on site B)
+[PASS] no cleartext fallback: nothing readable crossed the WAN
+[PASS] site A <-> site C is not affected (host-a -> host-c HTTPS)
+```
 
 ## Run it
 
@@ -97,7 +135,8 @@ To explore by hand: `sudo bash run.sh up` (network + VPN), then for example
 `sudo ip netns exec host-a ping 192.168.2.10`, then `sudo bash run.sh down`.
 
 On any Ubuntu/Debian machine: `sudo apt-get install -y iproute2 tcpdump curl
-iputils-ping python3 strongswan-charon strongswan-swanctl` then `sudo bash run.sh`.
+iputils-ping python3 openssl nftables strongswan-charon strongswan-swanctl` then
+`sudo bash run.sh`.
 
 ## Repository layout
 
@@ -108,6 +147,8 @@ iputils-ping python3 strongswan-charon strongswan-swanctl` then `sudo bash run.s
 | `lab/vpn-up.sh` | Generates the keys and starts strongSwan on the 3 gateways |
 | `lab/down.sh` | Destroys everything |
 | `vpn/site-*/swanctl.conf` | strongSwan configuration of each gateway |
+| `vpn/firewall.nft` | Fail-closed firewall loaded on each gateway |
+| `lab/webserver.py` | Web server of each host: HTTP 80, HTTPS 443, internal app 8080 |
 | `lab/common.sh` | Addressing plan and helpers shared by all scripts |
 | `tests/` | One test script per step |
 | `results/` | Packet captures from the last run (open the `.pcap` in Wireshark) |

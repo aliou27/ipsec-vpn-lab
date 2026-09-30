@@ -26,7 +26,7 @@ check_ping host-c "$WEB1"   web1
 
 info "2. Web access (HTTP)"
 check_http() {  # check_http <from> <to-ip> <label>
-  if on "$1" curl -s --max-time 3 "http://$2/" | grep -q "$3"; then
+  if on "$1" curl --noproxy '*' -s --max-time 3 "http://$2/" | grep -q "$3"; then
     ok "$1 opens http://$2/"
   else
     ko "$1 opens http://$2/"
@@ -45,7 +45,7 @@ on wan tcpdump -i to-a -U -w "$PCAP" 'host 62.59.1.2 or net 192.168.0.0/16' \
 TCPDUMP_PID=$!
 sleep 1
 on host-a ping -c 2 -W 1 -q "$HOST_B" >/dev/null 2>&1 || true
-on host-a curl -s --max-time 3 "http://$HOST_B/" >/dev/null || true
+on host-a curl --noproxy '*' -s --max-time 3 "http://$HOST_B/" >/dev/null || true
 sleep 1
 kill "$TCPDUMP_PID" 2>/dev/null; wait "$TCPDUMP_PID" 2>/dev/null || true
 

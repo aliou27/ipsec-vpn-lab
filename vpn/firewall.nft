@@ -1,0 +1,24 @@
+# Fail-closed firewall of the site gateways (loaded on site-a, site-b, site-c).
+#
+# Rule of thumb: traffic between two company sites (192.168.x.x <-> 192.168.x.x)
+# may cross the WAN ONLY inside IPsec. If it isn't protected, drop it.
+#
+# This covers the two ways traffic could leak in clear:
+#   - it matches no traffic selector (for example SSH, or port 8080)
+#   - the tunnel is down (strongSwan stopped, peer unreachable)
+# Without these rules the packets would simply be routed in clear, which is
+# what the Cisco version of this lab did.
+#
+# Traffic to the public web servers (203.0.113.0/24) is not concerned.
+
+table inet vpn_guard {
+  chain leak_block {
+    type filter hook forward priority filter; policy accept;
+
+    # Arriving from the WAN with a site source address, but not decrypted by IPsec
+    iifname "wan" ip saddr 192.168.0.0/16 meta ipsec missing counter drop comment "cleartext from another site"
+
+    # Leaving to the WAN towards another site, but no IPsec SA will encrypt it
+    oifname "wan" ip daddr 192.168.0.0/16 rt ipsec missing counter drop comment "would leave in cleartext"
+  }
+}

@@ -60,12 +60,12 @@ require_root() {
 
 require_tools() {
   local missing=()
-  for t in ip tcpdump curl ping python3; do
+  for t in ip tcpdump curl ping python3 openssl nft; do
     command -v "$t" >/dev/null 2>&1 || missing+=("$t")
   done
   if ((${#missing[@]})); then
     echo "Missing tools: ${missing[*]}" >&2
-    echo "On Ubuntu/Debian: sudo apt-get install -y iproute2 tcpdump curl iputils-ping python3" >&2
+    echo "On Ubuntu/Debian: sudo apt-get install -y iproute2 tcpdump curl iputils-ping python3 openssl nftables" >&2
     exit 1
   fi
 }
