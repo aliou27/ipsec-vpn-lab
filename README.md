@@ -103,15 +103,17 @@ routed in clear. Two nftables rules on each gateway forbid that: site-to-site
 traffic must come from IPsec (`meta ipsec`) and leave through IPsec
 (`rt ipsec`), otherwise it is dropped.
 
-What the tests check:
+What the tests check (output of the GitHub Actions run):
 
 ```
 [PASS] host-a -> host-b  HTTPS
-[PASS] host-a (client) -> host-b (server) used site-a's web-out SA (1880 -> 3074 bytes)
-[PASS] host-b (client) -> host-a (server) used site-a's web-in SA (481 -> 2359 bytes)
+[PASS] host-a (client) -> host-b (server) used site-a's web-out SA (2036 -> 3178 bytes)
+[PASS] host-b (client) -> host-a (server) used site-a's web-in SA (532 -> 2369 bytes)
 [PASS] host-a -> host-b:8080 (internal app) is blocked
 [PASS] nothing from these attempts reached the WAN in clear
+      site-a firewall rule "would leave in cleartext": 0 -> 3 packets dropped
 [PASS] spoofed cleartext packet from the WAN (fake 192.168.2.99) is dropped by site-a
+      site-a firewall rule "cleartext from another site": 0 -> 3 packets dropped
 [PASS] host-a -> host-b HTTP no longer works           (strongSwan stopped on site B)
 [PASS] no cleartext fallback: nothing readable crossed the WAN
 [PASS] site A <-> site C is not affected (host-a -> host-c HTTPS)
